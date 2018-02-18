@@ -84,12 +84,66 @@ mat.comment = sprintf('invisible\\("\\%s([^"]*)\\%s"\\)', begin.comment, end.com
 inline.comment = ' %InLiNe_IdEnTiFiEr%[ ]*"([ ]*#[^"]*)"'
 blank.comment = sprintf('invisible("%s%s")', begin.comment, end.comment)
 
-# wrapper around parse() and deparse()
+# wrapper around parse() and deparse(), iterativelly it tries to re-write every line with the correct width
 tidy_block = function(text, width = getOption('width'), arrow = FALSE) {
   exprs = parse_only(text)
   if (length(exprs) == 0) return(character(0))
   exprs = if (arrow) replace_assignment(exprs) else as.list(exprs)
-  sapply(exprs, function(e) paste(base::deparse(e, width), collapse = '\n'))
+  expr_2=sapply(exprs, function(e) paste(base::deparse(e, width), collapse = '\n'))
+
+  expr_2ver=NULL
+
+  # for each overflow expr, iterate until it reaches the condition
+  for(i in 1:length(expr_2))
+  {
+    expr = parse_only(expr_2[i])
+
+    # flagging if exceeds max
+    if(nchar(expr)>width)
+    {
+      new_width=width-1
+
+      flag_end_while=T
+      while(flag_end_while)
+      {
+        #new_expr=paste(base::deparse(expr, new_width), collapse = '\n')
+        new_expr=sapply(expr, function(e) paste(base::deparse(e, new_width), collapse = '\n'))
+
+        # split in several sentences
+        new_expr_split=strsplit(new_expr, "\n")[[1]]
+
+        # trim left spaces
+        new_expr_split_t=trimws(new_expr_split, which = "both")
+
+        # calculate sentence length
+        expr_len=nchar(new_expr_split_t)
+
+        # if all expr are under original width, then add expr to ok
+        if(all(expr_len <= width))
+        {
+          expr_2ver=rbind(expr_2ver, new_expr)
+          flag_end_while=F
+        }
+
+        new_width=new_width-1
+
+        # seting min condition
+        if(new_width<10)
+        {
+          new_expr=sapply(expr, function(e) paste(base::deparse(e, width), collapse = '\n'))
+          expr_2ver=rbind(expr_2ver, new_expr)
+          flag_end_while=F
+        }
+
+      } # end while
+    } else {
+      new_expr=sapply(expr, function(e) paste(base::deparse(e, width), collapse = '\n'))
+      expr_2ver=rbind(expr_2ver, new_expr)
+    }# end if width ok
+  } # end for
+
+  rownames(expr_2ver)=NULL
+  return(expr_2ver[,1])
 }
 
 # Restore the real source code from the masked text
